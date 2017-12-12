@@ -14,6 +14,7 @@
 {
     UITextView *_maskTextView;
     CAShapeLayer *_highlightLayer;
+    NSMutableArray *_rectArray;
 }
 
 - (instancetype)init {
@@ -37,6 +38,7 @@
     _highlightLayer.frame = CGRectMake(0, 0, self.frame.size.width, self.frame.size.height);
     _highlightLayer.fillColor = kLayerFillColor.CGColor;//本来textview的颜色
     [_maskTextView.layer setMask:_highlightLayer];
+    _rectArray = [NSMutableArray array];
 }
 
 - (void)setContentSize:(CGSize)contentSize {
@@ -81,43 +83,66 @@
 }
 - (void)addSelectedLayerWithRect:(CGRect)rect
 {
+    [_rectArray addObject:[NSValue valueWithCGRect:rect]];
     //添加一个上下的高亮的layer
     //如果是左右的动效的则需要把初始位置和最后的位置取出进行排序后再添加
     CAShapeLayer *layer = [CAShapeLayer layer];
     layer.frame = _highlightLayer.bounds;
     layer.fillColor = kLayerFillColor.CGColor;
     [_highlightLayer addSublayer:layer];
-    
     UIBezierPath *toPath = [UIBezierPath bezierPathWithRect:rect];
     
-#if 0
+
     UIBezierPath *fromPath = [UIBezierPath bezierPathWithRect:CGRectMake(rect.origin.x, rect.origin.y, rect.size.width, 0)];
     
-    CABasicAnimation *basicAnimation = [CABasicAnimation animationWithKeyPath:@"path"];
-    basicAnimation.duration = 0.5;
-    basicAnimation.repeatCount = 1;
-    basicAnimation.fromValue = (__bridge id)fromPath.CGPath;
-    basicAnimation.toValue = (__bridge id)toPath.CGPath;
-    [layer addAnimation:basicAnimation forKey:@"path"];
-#else
+    CABasicAnimation *pathAnimation = [CABasicAnimation animationWithKeyPath:@"path"];
+   // pathAnimation.duration = 1.0;
+   // pathAnimation.repeatCount = 1;
+    pathAnimation.fromValue = (__bridge id)fromPath.CGPath;
+    pathAnimation.toValue = (__bridge id)toPath.CGPath;
+    //[layer addAnimation:pathAnimation forKey:@"path"];
+
     //透明动效
-    CABasicAnimation *basicAnimation = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    basicAnimation.duration = 0.5;
-    basicAnimation.repeatCount = 1;
-    basicAnimation.fromValue = @0.3;
-    basicAnimation.toValue = @1;
-    [layer addAnimation:basicAnimation forKey:@"opacity"];
+    CABasicAnimation *opacityAnimation = [CABasicAnimation animationWithKeyPath:@"opacity"];
+    //opacityAnimation.duration = 1.0;
+    //opacityAnimation.repeatCount = 1;
+    opacityAnimation.fromValue = @0.2;
+    opacityAnimation.toValue = @1.0;
+    //[layer addAnimation:opacityAnimation forKey:@"opacity"];
     
-#endif
+    CAAnimationGroup *group =  [CAAnimationGroup animation];
+    group.repeatCount = 1;
+    group.duration = 1.0;
+    [group setAnimations:@[pathAnimation,opacityAnimation]];
+    group.removedOnCompletion = NO;
+    // 始终保持最新的效果
+   group.fillMode = kCAFillModeForwards;
     
-    layer.path = toPath.CGPath;
+    [layer addAnimation:group forKey:nil];
+    
+    //layer.path = toPath.CGPath;
 }
 - (void)clearHighlight
 {
     self.selectedRange = NSMakeRange(0, 0);
+    //淡出动画
     for (CAShapeLayer *layer in [_highlightLayer.sublayers copy]) {
-        [layer removeAllAnimations];
-        [layer removeFromSuperlayer];
+        [CATransaction begin];
+        CABasicAnimation *animation = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        animation.duration = 1.0;
+        animation.fromValue = [NSNumber numberWithFloat:1.0f];
+        animation.toValue = [NSNumber numberWithFloat:0.0f];
+        animation.removedOnCompletion = NO;
+        animation.fillMode = kCAFillModeBoth;
+        animation.additive = NO;
+        [CATransaction setCompletionBlock:^{
+            [layer removeAllAnimations];
+            [layer removeFromSuperlayer];
+        }];
+        [layer addAnimation:animation forKey:@"opacityOUT"];
+        
+        [CATransaction commit];
     }
+    
 }
 @end
